@@ -1,743 +1,1271 @@
-# InvenStock Development Instructions
+# HealthTech Sandbox - Production Instruction
 
 ## 🎯 Project Overview
 
-InvenStock เป็นระบบ Multi-Tenant Inventory Management ที่ออกแบบสำหรับโรงพยาบาลและสถานพยาบาล โดยเน้นการจัดการสต็อกแบบ Department-Centric
+**HealthTech Sandbox** เป็นแพลตฟอร์ม Sandbox สำหรับรับและพัฒนา Technology Requests จากบุคลากรทางการแพทย์  
+โดยมีเป้าหมายเพื่อแปลง pain point หน้างาน → sandbox solution แบบ governed และตรวจสอบได้
+
+**หลักการสำคัญ:**
+- ไม่ใช้ข้อมูลผู้ป่วยจริง
+- ไม่รับประกันการพัฒนา
+- เน้น educational และ experimental
+- Admin เป็น gatekeeper หลัก
+
+---
 
 ## 🏗️ Technical Architecture
 
 ### Tech Stack
-- **Frontend:** Next.js 15 (ต้อง await params ก่อนใช้งาน) + TypeScript + TailwindCSS + Shadcn/UI
-- **Backend:** Next.js API Routes + Prisma ORM
-- **Database:** PostgreSQL with Row-level Security
-- **Authentication:** JWT + bcryptjs
-- **Security:** Arcjet + Multi-tenant isolation
-- **Hosting:** Vercel + Supabase
-
-### Database Schema Organization
-```
-prisma/schemas/
-├── base.prisma          # Core types & enums
-├── user.prisma          # User & authentication
-├── organization.prisma  # Multi-tenant setup
-├── audit.prisma        # Audit trails & logging
-└── (another)
-```
-
-## 🏢 Multi-Tenant Architecture Rules
-
-### Organization Context - **UPDATED: Flat URL Structure**
-- **URL Pattern:** `/{orgSlug}/...` (แบบ Flat Structure)
-- **Data Isolation:** Row-level security enforced
-- **User Access:** Multiple organization membership allowed
-- **Tab Management:** Each tab maintains separate org context
-
-### Department-Centric Design - **UPDATED: Flat URL Structure**
-```typescript
-// ✅ Correct: Flat URL structure for department-specific endpoints
-/{orgSlug}/{deptSlug}/stocks
-/{orgSlug}/{deptSlug}/transfers
-
-// API endpoints
-/api/[orgSlug]/[deptSlug]/stocks
-/api/[orgSlug]/[deptSlug]/transfers
-
-// ❌ Avoid: Global stock endpoints
-/api/[orgSlug]/stocks (should not exist)
-```
-
-### Permission Implementation
-```typescript
-// Department-level permissions
-interface DepartmentPermission {
-  pattern: "departments.{deptId}.{resource}.{action}"
-  example: "departments.dept-001.stocks.adjust"
-}
-
-// Organization-level permissions
-interface OrgPermission {
-  pattern: "organization.{resource}.{action}"
-  example: "organization.departments.create"
-}
-```
-
-## 🔄 Transfer Workflow Implementation
-
-### State Machine Requirements
-```typescript
-enum TransferStatus {
-  PENDING = "PENDING",           // Initial request
-  APPROVED = "APPROVED",         // Management approval
-  PREPARED = "PREPARED",         // Items ready for pickup
-  IN_TRANSIT = "IN_TRANSIT",     // Items being delivered
-  DELIVERED = "DELIVERED",       // Items received
-  CANCELLED = "CANCELLED"        // Process cancelled
-}
-```
-
-### Business Logic Rules
-1. **Stock Reservation:** Reserved quantity updated on APPROVED status
-2. **Department Validation:** Both source/target departments must exist
-3. **Permission Checks:** User must have transfer permissions for source dept
-4. **Rollback Logic:** Handle cancellation at any stage
-5. **Audit Trail:** Log all status changes with timestamps
-
-## 📊 Real-time Features
-
-### WebSocket Implementation
-```typescript
-// Department-specific channels
-const channel = `org:${orgId}:dept:${deptId}:stocks`
-
-// Event types
-interface StockUpdateEvent {
-  type: 'STOCK_UPDATED'
-  productId: string
-  newQuantity: number
-  reservedQuantity: number
-}
-
-interface TransferStatusEvent {
-  type: 'TRANSFER_STATUS_CHANGED'
-  transferId: string
-  status: TransferStatus
-  updatedBy: string
-}
-```
-
-### Performance Requirements
-- **Stock Updates:** < 500ms propagation
-- **Low Stock Alerts:** Real-time per department
-- **Transfer Notifications:** Immediate status updates
-
-## 🔐 Authentication Architecture Overview
-
-**JWT Strategy**: Lightweight user identity only → Real-time organization permission checking
-
-```typescript
-// JWT Payload (Minimal)
-{ userId, username, firstName, lastName, email, phone }
-
-// Organization Context (Dynamic)
-Check via: getUserOrgRole(userId, orgSlug) → { role, organizationId }
-```
+- **Frontend:** Next.js 15 (App Router) + TypeScript
+- **UI:** TailwindCSS 4 + Shadcn/UI
+- **Backend:** Next.js API Routes
+- **Database:** PostgreSQL (Neon / Supabase)
+- **ORM:** Prisma
+- **Authentication:** JWT via jose library
+- **Password:** bcryptjs
+- **File Storage:** Vercel Blob / Supabase Storage
+- **Security:** Arcjet (Selective protection)
+- **Date Utilities:** date-fns
+- **Form Management:** react-hook-form + zod
+- **Toast Notifications:** sonner
+- **Hosting:** Vercel
 
 ---
 
-## 🛡️ **UPDATED: Security & Middleware Architecture**
+## 👥 User Roles & Permissions
 
-### **Middleware Security (MVP Level) - Flat URL Structure**
+### Role System
 ```typescript
-// middleware.ts - Enhanced for flat URL structure
-1. ✅ Skip static files
-2. ✅ Check public routes → pass immediately
-3. ✅ Arcjet protection (auth endpoints only - /api/auth/*)
-4. ✅ JWT authentication → redirect /login if no token
-5. ✅ Flat URL route validation → redirect /not-found if invalid route
-6. ✅ Parse orgSlug and deptSlug from flat URL
-7. ✅ Pass user headers to pages/APIs
+enum UserRole {
+  USER = "USER",     // Submit requests + view own requests + comment on own
+  ADMIN = "ADMIN"    // Full access + status management + comment anywhere
+}
 ```
 
-### **Security Flow**
-```typescript
-// Three-layer security approach
-Layer 1: Middleware (Authentication + Flat URL validation)
-Layer 2: API (/api/auth/me - Organization access validation)  
-Layer 3: Page (Direct API calls, no useAuth context dependency)
-```
+### Permission Matrix
 
-### **Key Security Features**
-- **Bypass Prevention:** Cannot access org pages without proper authentication
-- **Route Validation:** Invalid routes automatically redirect to /not-found
-- **Selective Protection:** Arcjet only on critical auth endpoints (performance optimized)
-- **Real-time Access Control:** Database checks for every organization access
-- **Flat URL Parsing:** Extract orgSlug and deptSlug from clean URLs
+| Feature | USER | ADMIN |
+|---------|------|-------|
+| View landing page | ✅ | ✅ |
+| Submit request (requires login) | ✅ | ✅ |
+| View own requests | ✅ | ✅ |
+| View all requests | ❌ | ✅ |
+| Change request status | ❌ | ✅ |
+| Comment on own request | ✅ | ✅ |
+| Comment on any request | ❌ | ✅ |
 
 ---
 
-### 📱 **UPDATED: Frontend Page Patterns - Flat URL Structure**
+## 🏷️ Request Status System
 
-#### Pattern 1: Public Page (No Auth Required)
+### Status Tags (Admin can change anytime - no state machine)
 ```typescript
-// pages/login.tsx, pages/register.tsx, pages/landing.tsx
-export default function PublicPage() {
-  return <PublicContent />
+enum RequestStatus {
+  PENDING_REVIEW = "รอตรวจสอบ",
+  UNDER_CONSIDERATION = "อยู่ในการพิจารณา",
+  IN_DEVELOPMENT = "อยู่ในการพัฒนา",
+  IN_TESTING = "อยู่ในการทดสอบ",
+  COMPLETED = "สำเร็จ",
+  BEYOND_CAPACITY = "เกินความสามารถ"
 }
 ```
 
-#### Pattern 2: Auth Required (No Organization)
-```typescript
-// pages/dashboard.tsx (organization selector)
-export default function DashboardPage() {
-  const { user, loading } = useAuth()
-  
-  if (loading) return <LoadingState />
-  if (!user) return <RedirectToLogin />
-  
-  return <OrganizationSelector />
-}
-```
-
-#### Pattern 3: **UPDATED - Organization Page (Flat URL Pattern)**
-```typescript
-// app/[orgSlug]/page.tsx - Flat URL structure
-export default function OrganizationPage() {
-  const params = useParams()
-  const orgSlug = params.orgSlug as string
-  
-  const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState(null)
-  const [organizationData, setOrganizationData] = useState(null)
-
-  useEffect(() => {
-    const loadPageData = async () => {
-      // ✅ Direct API call (no useAuth context dependency)
-      const response = await fetch(`/api/auth/me?orgSlug=${orgSlug}`)
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          router.push('/login')
-          return
-        }
-        throw new Error('Failed to load user data')
-      }
-
-      const data = await response.json()
-      
-      // Check organization access
-      if (!data.data.currentOrganization || data.data.currentOrganization.slug !== orgSlug) {
-        setError('No access to this organization')
-        return
-      }
-
-      setUser(data.data.user)
-      setOrganizationData(data.data.currentOrganization)
-    }
-    
-    loadPageData()
-  }, [orgSlug])
-
-  // Render dashboard with full sidebar layout
-  return (
-    <div className="h-screen bg-gray-50 flex">
-      <DashboardSidebar />
-      <MainContent />
-    </div>
-  )
-}
-```
-
-#### Pattern 4: **UPDATED - Department Context (Flat URL Pattern)**
-```typescript
-// app/[orgSlug]/[deptSlug]/page.tsx - Flat department URL
-export default function DepartmentPage() {
-  const params = useParams()
-  const orgSlug = params.orgSlug as string
-  const deptSlug = params.deptSlug as string
-  
-  // ✅ Use same Direct API pattern as Organization Page
-  const response = await fetch(`/api/auth/me?orgSlug=${orgSlug}`)
-  
-  // Validate access and render department content
-  return <DepartmentDashboard />
-}
-
-// app/[orgSlug]/[deptSlug]/stocks/page.tsx - Department stocks
-// app/[orgSlug]/[deptSlug]/transfers/page.tsx - Department transfers
-```
+**Status Rules:**
+- Default: ทุก request เริ่มต้นที่ `รอตรวจสอบ`
+- Admin only: เปลี่ยนสถานะได้ตลอดเวลา
+- No auto-transition: manual change only
+- Status History: บันทึกทุก transition (fromStatus → toStatus + changedBy + note + timestamp)
 
 ---
 
-### 🔌 **UPDATED: API Route Patterns - Flat URL Structure**
+## 📝 Request Schema
 
-#### Pattern 1: Public API (No Auth)
+### Request Form Fields
 ```typescript
-// app/api/health/route.ts
-export async function GET() {
-  return NextResponse.json({ status: 'ok' })
+interface RequestForm {
+  // Required
+  painPoint: string              // Pain point หน้างาน (Text area)
+  currentWorkflow: string        // ทำงานยังไงตอนนี้ (Text area)
+  expectedTechHelp: string       // อยากให้ tech ช่วยอะไร (Text area)
+  requestType: RequestType       // Dropdown selection
+  
+  // Optional
+  attachments?: File[]           // รูปภาพ, PDF (max 5 files, 10MB each)
 }
-```
 
-#### Pattern 2: User Auth Only
-```typescript
-// app/api/user/profile/route.ts
-import { getServerUser } from '@/lib/auth-server'
-
-export async function GET() {
-  const user = await getServerUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-  
-  return NextResponse.json({ user })
-}
-```
-
-#### Pattern 3: **UPDATED - /api/auth/me with Organization Context**
-```typescript
-// app/api/auth/me/route.ts - Enhanced with org context
-export async function GET(request: NextRequest) {
-  const user = await getServerUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-
-  // Get organization context from query params
-  const { searchParams } = new URL(request.url)
-  const orgSlug = searchParams.get('orgSlug')
-
-  let currentOrganization = null
-  let permissions = {}
-
-  if (orgSlug) {
-    // Real-time database check for organization access
-    const access = await getUserOrgRole(user.userId, orgSlug)
-    if (access) {
-      currentOrganization = await getOrganizationBySlug(orgSlug)
-      permissions = {
-        currentRole: access.role,
-        canManageOrganization: access.role === 'OWNER',
-        // ... other permissions
-      }
-    }
-  }
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      user,
-      currentOrganization,
-      permissions,
-      organizations: await getUserOrganizations(user.userId)
-    }
-  })
-}
-```
-
-#### Pattern 4: **UPDATED - Organization Member Required (Flat API)**
-```typescript
-// app/api/[orgSlug]/products/route.ts - Flat API structure
-import { getUserFromHeaders, getUserOrgRole } from '@/lib/auth-server'
-
-export async function GET(request: Request, { params }: { params: { orgSlug: string } }) {
-  const user = getUserFromHeaders(request.headers)
-  if (!user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-  
-  const access = await getUserOrgRole(user.userId, params.orgSlug)
-  if (!access) {
-    return NextResponse.json({ error: 'No access to organization' }, { status: 403 })
-  }
-  
-  // Business logic - all org members can read products
-  const products = await prisma.product.findMany({
-    where: { organizationId: access.organizationId }
-  })
-  
-  return NextResponse.json({ products })
-}
-```
-
-#### Pattern 5: **UPDATED - Department API (Flat Structure)**
-```typescript
-// app/api/[orgSlug]/[deptSlug]/stocks/route.ts - Flat department API
-import { requireOrgPermission } from '@/lib/auth-server'
-
-export async function GET(
-  request: Request, 
-  { params }: { params: { orgSlug: string; deptSlug: string } }
-) {
-  const user = getUserFromHeaders(request.headers)
-  if (!user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
-  
-  // Check organization access
-  const access = await getUserOrgRole(user.userId, params.orgSlug)
-  if (!access) {
-    return NextResponse.json({ error: 'No access to organization' }, { status: 403 })
-  }
-  
-  // Get department and stocks
-  const department = await getDepartmentBySlug(access.organizationId, params.deptSlug)
-  const stocks = await getDepartmentStocks(department.id)
-  
-  return NextResponse.json({ stocks, department })
+enum RequestType {
+  CALCULATOR = "CALCULATOR",
+  FORM = "FORM",
+  WORKFLOW = "WORKFLOW",
+  DECISION_AID = "DECISION_AID",
+  OTHER = "OTHER"
 }
 ```
 
 ---
 
-## 🎨 **UPDATED: Frontend Component Standards**
+## 💾 File Upload Architecture
 
-### **Page Structure & Safety**
+### Storage Strategy
+
+**Recommended:** Vercel Blob (หรือ Supabase Storage)
+
+**Upload Rules:**
+- Max file size: 10MB per file
+- Max files: 5 files per request
+- Allowed types: `image/*`, `application/pdf`
+- Security: Server-side validation required
+
+**Data Model:**
 ```typescript
-// ✅ NEW - Safe component props handling
+interface Attachment {
+  id: string
+  requestId: string
+  filename: string
+  fileType: string        // MIME type
+  fileSize: number        // bytes
+  fileUrl: string         // CDN URL
+  uploadedAt: DateTime
+}
+```
+
+**File Validation Principles:**
+- ตรวจสอบ file type และ size ที่ server-side
+- ห้าม trust client-side validation
+- Sanitize filename
+- Generate unique storage paths
+
+---
+
+## 🗂️ Database Schema Design
+
+### Schema Organization
+```
+prisma/
+├── schema.prisma           # Main schema (generated from merge)
+├── schemas/                # Modular schemas
+│   ├── user.prisma        # User & Auth
+│   ├── request.prisma     # Request system
+│   ├── comment.prisma     # Comment system
+│   └── attachment.prisma  # File attachments
+└── seed.ts                # Seed data
+```
+
+### Core Models (High-level Structure)
+
+**User Model:**
+- id, email (unique), password (hashed), name, role
+- Relations: requests[], comments[]
+- Timestamps: createdAt, updatedAt
+
+**Request Model:**
+- id, userId, painPoint, currentWorkflow, expectedTechHelp, requestType, status
+- Timestamps: createdAt, updatedAt
+- Relations: user, attachments[], comments[], statusHistory[]
+
+**Attachment Model:**
+- id, requestId, filename, fileType, fileSize, fileUrl, uploadedAt
+- Cascade delete when request deleted
+
+**Comment Model:**
+- id, requestId, userId, content
+- Timestamps: createdAt, updatedAt
+- Relations: request, user
+- Cascade delete when request deleted
+
+**StatusHistory Model:**
+- id, requestId, fromStatus, toStatus, changedBy (userId), note, changedAt
+- Purpose: Track status changes for transparency
+- Cascade delete when request deleted
+
+**Indexes:**
+- User: email (unique)
+- Request: userId, status, createdAt
+- Attachment: requestId
+- Comment: requestId, userId, createdAt
+- StatusHistory: requestId, changedAt
+
+---
+
+## 🔐 Authentication Architecture
+
+### JWT Strategy (Minimal Payload)
+
+**Principle:** Store only user identity in JWT → Check permissions real-time from database
+
+**JWT Payload:**
+```typescript
+interface JWTPayload {
+  userId: string
+  email: string
+  name: string
+  role: UserRole
+}
+```
+
+**Implementation Libraries:**
+- JWT signing/verification: `jose` library
+- Password hashing: `bcryptjs`
+- Token storage: HTTP-only cookies
+
+**Auth Flow:**
+1. User login → Verify password → Sign JWT → Set HTTP-only cookie
+2. Middleware reads cookie → Verify JWT → Extract user data
+3. API routes check permissions from database (not from JWT)
+
+**Why Minimal JWT?**
+- ไม่ต้อง refresh token เมื่อ role เปลี่ยน
+- Database เป็น single source of truth
+- Security: ลดข้อมูลใน JWT
+
+---
+
+## 🛡️ Middleware Security Architecture
+
+### Protection Layers
+
+**Layer 1: Middleware (Authentication + Route Guard)**
+```
+middleware.ts responsibilities:
+1. Skip static files (/_next, /static, images)
+2. Allow public routes (/, /login, /register)
+3. Arcjet protection → /api/auth/* endpoints only (rate limiting)
+4. JWT validation → redirect /login if invalid
+5. Admin route guard → /admin requires ADMIN role
+6. Inject user headers (x-user-id, x-user-email, x-user-role) for API routes
+```
+
+**Layer 2: API Route Permission Checks**
+```
+Every API route must:
+1. Extract user from headers (injected by middleware)
+2. Check permissions from database
+3. Validate ownership (USER can only access own requests)
+4. Return 401 if not authenticated
+5. Return 403 if no permission
+```
+
+**Layer 3: UI Permission Checks**
+```
+Components should:
+1. Conditionally render based on user role
+2. Hide admin features from USER role
+3. Disable actions if no permission
+```
+
+**Security Principles:**
+- Middleware เป็น first line of defense
+- API routes ห้าม trust headers blindly
+- Database check for critical operations
+- Arcjet only on sensitive endpoints (performance)
+
+---
+
+## 🗺️ Application Routes Structure
+
+### Page Routes (App Router Pattern)
+```
+app/
+├── page.tsx                    # Landing page (public)
+├── login/page.tsx              # Login (public)
+├── register/page.tsx           # Register (public)
+├── dashboard/page.tsx          # My requests (auth required)
+├── requests/
+│   ├── new/page.tsx           # Submit form (auth required)
+│   └── [id]/page.tsx          # Request detail (auth required, ownership check)
+└── admin/
+    └── page.tsx               # Admin dashboard (admin only)
+```
+
+### API Routes Pattern
+```
+app/api/
+├── auth/
+│   ├── login/route.ts         # POST - Login
+│   ├── register/route.ts      # POST - Register
+│   ├── logout/route.ts        # POST - Logout
+│   └── me/route.ts            # GET - Current user
+├── requests/
+│   ├── route.ts               # POST - Create, GET - List (filtered by role)
+│   ├── [id]/
+│   │   ├── route.ts          # GET - Detail, PATCH - Update
+│   │   └── comments/route.ts  # POST - Add comment, GET - List comments
+│   └── upload/route.ts        # POST - File upload helper
+└── admin/
+    └── requests/
+        └── [id]/
+            └── status/route.ts # PATCH - Change status (admin only)
+```
+
+---
+
+## 🔄 User Flow Architecture
+
+### Flow 1: Landing → Login → Dashboard
+```
+/ (Landing - Public)
+  ↓
+/login (Public)
+  ↓ [After successful login]
+/dashboard (Protected)
+```
+
+**Landing Page Responsibilities:**
+- Explain sandbox concept clearly
+- Show completed projects showcase
+- Display stats (total requests, completed, in progress)
+- CTA buttons → Login / Register
+
+**Dashboard Responsibilities:**
+- List user's own requests (USER role)
+- List all requests (ADMIN role)
+- Show request cards with: title (truncated painPoint), status badge, type, created date
+- Link to detail page
+- CTA → Submit new request
+
+---
+
+### Flow 2: Submit Request
+```
+/requests/new (Protected - Auth Required)
+  ↓ [Submit form with files]
+POST /api/requests
+  ↓ [Success]
+/requests/[id] (Detail page)
+```
+
+**Form Responsibilities:**
+- Multi-step or single form (your choice)
+- Validate all required fields
+- File upload with client-side preview
+- Show file validation errors
+- Loading state during submission
+
+**API Responsibilities:**
+- Validate user authentication
+- Validate form data (use zod schema)
+- Validate uploaded files (server-side)
+- Upload files to storage (Vercel Blob)
+- Create request in database
+- Create attachment records
+- Return created request with ID
+
+---
+
+### Flow 3: View Request Detail
+```
+/requests/[id] (Protected - Ownership check)
+  ↓ [Load data]
+GET /api/requests/[id]
+```
+
+**Permission Logic:**
+```typescript
+// User can view if:
+// 1. User is ADMIN, OR
+// 2. User owns the request (request.userId === currentUser.id)
+
+const hasAccess = 
+  currentUser.role === 'ADMIN' || 
+  request.userId === currentUser.userId
+```
+
+**Page Layout (Two-column):**
+
+**Left Column:**
+- Request info (painPoint, currentWorkflow, expectedTechHelp, requestType)
+- Status badge
+- Attachments (clickable thumbnails/links)
+- Comment section (Facebook-style)
+
+**Right Column:**
+- Admin actions (if ADMIN) → Status change dropdown
+- Status history timeline
+- Request metadata (created date, requester name)
+
+---
+
+### Flow 4: Admin Status Change
+```
+Admin opens /requests/[id]
+  ↓
+Change status via dropdown
+  ↓
+PATCH /api/admin/requests/[id]/status
+  ↓
+Create StatusHistory record
+  ↓
+Update request status
+  ↓
+Refresh page / Real-time update
+```
+
+**Status Change Data:**
+```typescript
+{
+  status: RequestStatus,      // New status
+  note?: string              // Optional note explaining change
+}
+```
+
+**StatusHistory Record:**
+```typescript
+{
+  requestId: string,
+  fromStatus: RequestStatus,  // Previous status
+  toStatus: RequestStatus,    // New status
+  changedBy: string,          // Admin userId
+  note?: string,              // Optional note
+  changedAt: DateTime         // Auto timestamp
+}
+```
+
+---
+
+### Flow 5: Comment System
+```
+User views /requests/[id]
+  ↓
+Type comment in textarea
+  ↓
+POST /api/requests/[id]/comments
+  ↓
+Permission check (own request OR admin)
+  ↓
+Create comment in database
+  ↓
+Return comment with user data
+  ↓
+Update UI (prepend new comment)
+```
+
+**Comment Permission:**
+```typescript
+// User can comment if:
+// 1. User is ADMIN (can comment anywhere), OR
+// 2. User owns the request
+
+const canComment = 
+  currentUser.role === 'ADMIN' || 
+  request.userId === currentUser.userId
+```
+
+**Comment Display (Facebook-style):**
+- Avatar (user initials)
+- User name
+- Comment content (whitespace-preserved)
+- Relative timestamp (e.g., "2 hours ago")
+- Sort: newest first
+
+---
+
+## 🎨 Component Architecture Standards
+
+### Directory Structure Pattern
+```
+components/
+├── ui/                     # Shadcn/UI primitives (button, card, dialog, etc.)
+├── shared/                 # Reusable components (Header, Footer, LoadingState)
+├── RequestForm/            # Request submission module
+│   ├── index.tsx
+│   ├── BasicInfoStep.tsx
+│   └── FileUploadSection.tsx
+├── RequestList/            # Request listing module
+│   ├── index.tsx
+│   ├── RequestCard.tsx
+│   └── RequestFilters.tsx
+├── RequestDetail/          # Request detail module
+│   ├── index.tsx
+│   ├── RequestInfo.tsx
+│   ├── StatusBadge.tsx
+│   ├── StatusHistory.tsx
+│   ├── AttachmentList.tsx
+│   └── CommentSection/
+│       ├── index.tsx
+│       ├── CommentList.tsx
+│       ├── CommentItem.tsx
+│       └── CommentInput.tsx
+└── AdminDashboard/         # Admin dashboard module
+    ├── index.tsx
+    ├── StatsOverview.tsx
+    ├── RequestTable.tsx
+    └── StatusFilter.tsx
+```
+
+### Component File Header Convention
+
+**ทุกไฟล์ component ต้องมี comment header ระบุ path และชื่อ component**
+```typescript
+// components/RequestForm/index.tsx
+// RequestForm - Main form component
+
+// components/RequestDetail/CommentSection/CommentInput.tsx
+// RequestDetail/CommentSection/CommentInput - Comment input form
+```
+
+### Component Design Rules
+
+**Size Limits:**
+- Max 200 lines per component
+- Max 8 props → use composition if more
+- Extract complex logic to custom hooks
+
+**Prop Safety:**
+```typescript
+// ✅ Always provide default values
 interface ComponentProps {
   stats?: {
-    totalProducts?: number;
-    lowStockItems?: number;
-    // Always use optional props to prevent undefined errors
+    total?: number;
+    pending?: number;
   };
 }
 
 export const Component = ({ stats = {} }: ComponentProps) => {
-  // Provide default values
   const safeStats = {
-    totalProducts: stats.totalProducts || 0,
-    lowStockItems: stats.lowStockItems || 0,
+    total: stats.total ?? 0,
+    pending: stats.pending ?? 0,
+  };
+  
+  return <div>{safeStats.total}</div>;
+}
+```
+
+**Composition Over Props:**
+```typescript
+// ❌ Bad: Too many props
+<Table data={data} loading={loading} error={error} onSort={...} onFilter={...} />
+
+// ✅ Good: Composition
+<Table>
+  <TableHeader />
+  <TableBody data={data} />
+  <TableFooter />
+</Table>
+```
+
+**Extract Logic to Hooks:**
+```typescript
+// ✅ Custom hooks for data fetching
+function useRequestData(requestId: string) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    // Fetch logic
+  }, [requestId]);
+  
+  return { data, loading, error };
+}
+```
+
+---
+
+## 💬 Comment System Architecture
+
+### UI Pattern (Facebook-style)
+
+**Layout:**
+```
+┌─────────────────────────────────┐
+│ Comment Input (Textarea + Button)│
+├─────────────────────────────────┤
+│ ┌───┬─────────────────────────┐ │
+│ │ A │ John Doe                │ │
+│ │   │ Great idea! Let's...    │ │
+│ │   │ 2 hours ago             │ │
+│ └───┴─────────────────────────┘ │
+│ ┌───┬─────────────────────────┐ │
+│ │ B │ Jane Smith              │ │
+│ │   │ I agree with...         │ │
+│ │   │ 5 hours ago             │ │
+│ └───┴─────────────────────────┘ │
+└─────────────────────────────────┘
+```
+
+**Features:**
+- Avatar with user initials
+- User name display
+- Comment content (whitespace preserved)
+- Relative timestamp using `date-fns` (Thai locale)
+- Auto-scroll to new comment
+- Optimistic update (show immediately, then confirm)
+
+**State Management:**
+```typescript
+// Local state for comment list
+const [comments, setComments] = useState(initialComments);
+
+// Add comment optimistically
+const handleCommentAdded = (newComment) => {
+  setComments(prev => [newComment, ...prev]); // Prepend
+};
+```
+
+---
+
+## 📊 Admin Dashboard Architecture
+
+### Dashboard Layout
+
+**Top Section: Stats Overview (4 cards)**
+```
+┌──────────┬──────────┬──────────┬──────────┐
+│ Total    │ Pending  │ In Dev   │ Completed│
+│ Requests │ Review   │          │          │
+└──────────┴──────────┴──────────┴──────────┘
+```
+
+**Middle Section: Filters**
+- Status filter dropdown (All / Specific status)
+- Search by keyword (optional - future enhancement)
+
+**Bottom Section: Request Table**
+
+Columns:
+- ID (truncated)
+- Pain Point (truncated, max 100 chars)
+- Type (badge)
+- Status (badge)
+- Requester (name + email)
+- Submitted Date
+- Comments Count
+- Actions (View Detail button)
+
+**Table Features:**
+- Sortable columns
+- Status badge color coding
+- Pagination (if > 50 requests)
+- Click row → Navigate to detail page
+
+---
+
+## 🔌 API Design Principles
+
+### Response Format Standards
+
+**Success Response:**
+```typescript
+{
+  success: true,
+  data: { ... },
+  meta?: { ... }  // Optional pagination, etc.
+}
+```
+
+**Error Response:**
+```typescript
+{
+  success: false,
+  error: "Error message",
+  code?: "ERROR_CODE",
+  details?: { ... }
+}
+```
+
+### HTTP Status Codes
+
+- `200 OK` → Successful GET/PATCH
+- `201 Created` → Successful POST
+- `400 Bad Request` → Validation error
+- `401 Unauthorized` → Missing/invalid auth
+- `403 Forbidden` → Valid auth but no permission
+- `404 Not Found` → Resource doesn't exist
+- `500 Internal Server Error` → Server error
+
+### Authentication Pattern for API Routes
+```typescript
+// All protected API routes follow this pattern:
+
+export async function GET(request: Request) {
+  // 1. Extract user from headers (injected by middleware)
+  const userId = request.headers.get('x-user-id');
+  const userRole = request.headers.get('x-user-role');
+  
+  if (!userId) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    );
   }
   
-  return <div>{safeStats.totalProducts}</div>
-}
-```
-
-### **🎨 Responsive Design**
-```typescript
-// Desktop-first, mobile-compatible
-<div className="grid grid-cols-3 lg:grid-cols-2 md:grid-cols-1">
-
-// Touch-friendly sizes
-const BUTTON_HEIGHT = 'h-11'  // 44px minimum
-```
-
-### **🧩 Component Modularity**
-```
-components/
-├── ui/           # Base components
-├── layout/       # Layouts, headers, nav
-├── forms/        # Form modules
-├── data-display/ # Tables, cards
-└── features/     # Business components
-```
-
-### **Size Rules**
-- Max 200 lines per component
-- Max 8 props - use composition
-- Extract logic to custom hooks
-
-### **Component Patterns**
-```typescript
-// ✅ Page = orchestrator only
-export default function StocksPage() {
-  return (
-    <PageLayout>
-      <StockHeader />
-      <StockTable />
-    </PageLayout>
-  )
-}
-
-// ✅ Responsive rendering
-const DataDisplay = ({ data }) => {
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  return isMobile ? <CardView /> : <TableView />
-}
-
-// ✅ Complex forms as directories
-forms/TransferForm/
-├── index.tsx
-├── BasicInfo.tsx
-└── ItemSelection.tsx
-```
-
-### **📁 Module Component Creation**
-เมื่อสร้าง module component ให้แยกไฟล์และใส่คอมเมนต์ระบุไฟล์ที่ด้านบนทุกไฟล์
-```typescript
-// components/forms/TransferForm/index.tsx
-// TransferForm - Main form component
-
-// components/forms/TransferForm/BasicInfo.tsx  
-// TransferForm/BasicInfo - Basic information step
-
-// components/data-display/StockTable/index.tsx
-// StockTable - Main table component
-
-// components/data-display/StockTable/StockRow.tsx
-// StockTable/StockRow - Individual table row
-```
-
-### **🎯 Key Rules**
-- Desktop-first, mobile-compatible
-- Extract logic to hooks
-- Split complex forms into modules
-- Pages orchestrate, components execute
-- แยกไฟล์ module + คอมเมนต์ชื่อไฟล์ ด้านบนทุกไฟล์
-- **Always provide default values for props to prevent undefined errors**
-
----
-
-## 📈 Performance & Monitoring
-
-### Database Optimization
-- **Indexes:** Composite indexes on (orgId, deptId, ...)
-- **Query Patterns:** Always include org context in WHERE clauses
-- **Connection Pooling:** Configured for multi-tenant usage
-
-### Monitoring Requirements
-- **API Response Times:** < 200ms for CRUD operations
-- **Real-time Latency:** < 500ms for stock updates
-- **Database Connections:** Monitor pool usage
-- **Security Events:** Log authentication failures
-
----
-
-## 📋 **UPDATED: Development Guidelines - Flat URL Structure**
-
-### **API Design Patterns - Flat Structure**
-```typescript
-// ✅ Flat multi-tenant API structure
-/api/[orgSlug]/products
-/api/[orgSlug]/users
-/api/[orgSlug]/[deptSlug]/stocks
-/api/[orgSlug]/[deptSlug]/transfers
-
-// ✅ Always include org context validation
-export async function GET(
-  request: Request,
-  { params }: { params: { orgSlug: string; deptSlug?: string } }
-) {
-  const user = getUserFromHeaders(request.headers)
-  const access = await getUserOrgRole(user.userId, params.orgSlug)
-  // Business logic here
-}
-```
-
-### 📊 Audit Log System
-
-#### **Schema Overview with Snapshots**
-```prisma
-model AuditLog {
-  id             String        @id @default(cuid())
-  organizationId String
+  // 2. Permission check (if needed)
+  if (requiresAdmin && userRole !== 'ADMIN') {
+    return NextResponse.json(
+      { error: 'Admin access required' },
+      { status: 403 }
+    );
+  }
   
-  // ✅ Actor (ผู้ทำ) - Snapshot + Relation
-  userId         String?       // User ID (for query)
-  userSnapshot   Json?         // ✅ User info ณ ขณะนั้น
-  
-  // ✅ Target (ผู้ถูกกระทำ) - Snapshot + Relation
-  targetUserId   String?       // Target User ID
-  targetSnapshot Json?         // ✅ Target user info ณ ขณะนั้น
-  
-  departmentId   String?
-  action         String
-  category       AuditCategory
-  severity       AuditSeverity
-  description    String
-  resourceId     String?
-  resourceType   String?
-  payload        Json?
-  ipAddress      String?
-  userAgent      String?
-  createdAt      DateTime @default(now())
-}
-
-model Department {
+  // 3. Business logic
   // ...
-  createdBy         String
-  createdBySnapshot Json?    // ✅ Creator snapshot
-  updatedBy         String?
-  updatedBySnapshot Json?    // ✅ Updater snapshot
-  // ...
 }
 ```
 
-When to Log Audit
+### File Upload API Pattern
 ```typescript
-// ✅ Log these actions:
-- CREATE, UPDATE, DELETE operations (NOT Read)
-- Permission changes (role updates, member removal)
-- Critical operations (approve transfer, delete department)
-- Authentication events (login, failed attempts)
-
-// ❌ Don't log:
-- GET/Read operations
-- Organization creation (tracked by createdAt + OWNER role)
-- Health checks
-```
-
-Usage Pattern with Snapshots
-```typescript
-import { createAuditLog, getRequestMetadata } from '@/lib/audit-logger';
-import { createUserSnapshot } from '@/lib/user-snapshot';
-
-// In API routes
-const { ipAddress, userAgent } = getRequestMetadata(request);
-
-// ✅ Create snapshot before logging
-const userSnapshot = await createUserSnapshot(user.userId, organizationId);
-
-await createAuditLog({
-  organizationId: access.organizationId,
-  userId: user.userId,
-  userSnapshot,              // ✅ Pass actor snapshot
-  targetUserId: targetId,    // ✅ For role changes/member removal
-  targetSnapshot,            // ✅ Pass target snapshot
-  departmentId: department?.id,
-  action: 'products.create',
-  category: 'PRODUCT',
-  severity: 'INFO',
-  description: `สร้างสินค้า ${product.name}`,
-  resourceId: product.id,
-  resourceType: 'Product',
-  payload: { productName: product.name },
-  ipAddress,
-  userAgent,
-});
-```
-
-Record Creation/Update Pattern
-```typescript
-// ✅ When creating/updating records (e.g., Department)
-const userSnapshot = await createUserSnapshot(user.userId, organizationId);
-
-await prisma.department.create({
-  data: {
-    // ... other fields
-    createdBy: user.userId,
-    createdBySnapshot: userSnapshot,  // ✅ Store creator snapshot
-  }
-});
-
-// ✅ On update
-const updaterSnapshot = await createUserSnapshot(user.userId, organizationId);
-
-await prisma.department.update({
-  data: {
-    // ... other fields
-    updatedBy: user.userId,
-    updatedBySnapshot: updaterSnapshot,  // ✅ Store updater snapshot
-  }
-});
-```
-
-Snapshot Benefits
-
-- Immutable History: User data ณ ขณะนั้นไม่เปลี่ยนแปลง
-- Complete Context: เห็นชื่อ, role, email ของผู้ทำ action ตอนนั้น
-- Audit Integrity: ถ้า user ถูกลบ ยังมีข้อมูลใน snapshot
-
-Helper Functions
-```typescript
-// lib/user-snapshot.ts
-createUserSnapshot(userId, organizationId?)  // Create snapshot
-createUserSnapshotFromJWT(jwtUser, role?)   // From JWT payload
-
-// lib/audit-logger.ts
-createAuditLog(params)              // Create log with snapshots
-getRequestMetadata(request)         // Get IP + User-Agent
-```
----
-
-### **Component Architecture**
-```typescript
-// ✅ Permission-aware components
-interface BaseComponentProps {
-  organizationId: string
-  permissions: string[]
-}
-
-// ✅ Department context
-interface DepartmentComponentProps extends BaseComponentProps {
-  departmentId: string
-}
-```
-
-### **Error Handling**
-```typescript
-// ✅ Structured error responses
-interface APIError {
-  code: string
-  message: string
-  details?: any
-  timestamp: string
-}
-
-// Common error patterns
-const ErrorCodes = {
-  ORG_ACCESS_DENIED: 'ORG_ACCESS_DENIED',
-  DEPT_PERMISSION_REQUIRED: 'DEPT_PERMISSION_REQUIRED',
-  STOCK_INSUFFICIENT: 'STOCK_INSUFFICIENT',
-  TRANSFER_INVALID_STATE: 'TRANSFER_INVALID_STATE'
-}
-```
-
-### **Navigation Patterns - Flat URL Structure**
-```typescript
-// ✅ Navigation helpers for flat URLs
-export class OrgNavigation {
-  constructor(private orgSlug: string) {}
+// POST /api/requests/upload
+export async function POST(request: Request) {
+  // 1. Auth check
+  // 2. Parse FormData
+  const formData = await request.formData();
+  const files = formData.getAll('files') as File[];
   
-  // Organization routes
-  dashboard() { return `/${this.orgSlug}`; }
-  settings() { return `/${this.orgSlug}/settings`; }
-  members() { return `/${this.orgSlug}/members`; }
+  // 3. Validate files server-side
+  for (const file of files) {
+    if (file.size > MAX_SIZE) return error;
+    if (!ALLOWED_TYPES.includes(file.type)) return error;
+  }
   
-  // Department routes (flat structure)
-  dept(deptSlug: string) { return `/${this.orgSlug}/${deptSlug}`; }
-  deptStocks(deptSlug: string) { return `/${this.orgSlug}/${deptSlug}/stocks`; }
-  deptTransfers(deptSlug: string) { return `/${this.orgSlug}/${deptSlug}/transfers`; }
-  deptProducts(deptSlug: string) { return `/${this.orgSlug}/${deptSlug}/products`; }
+  // 4. Upload to storage (Vercel Blob)
+  const urls = await Promise.all(
+    files.map(file => uploadToBlob(file))
+  );
+  
+  // 5. Return URLs
+  return NextResponse.json({ urls });
 }
-
-// Usage example
-const nav = new OrgNavigation('siriraj-hospital');
-nav.deptStocks('opd'); // → /siriraj-hospital/opd/stocks
 ```
 
 ---
 
-## 🚀 **Key Architecture Benefits**
+## 🚀 Development Workflow
 
-### **🔒 Security Excellence**
-- **Multi-layer Protection:** Middleware + API + UI layers
-- **Bypass Prevention:** Cannot access org pages without proper authentication
-- **Real-time Access Control:** Database checks for every organization access
-- **Selective Protection:** Arcjet only on critical endpoints (performance optimized)
+### Database Scripts (from package.json pattern)
 
-### **⚡ Performance Optimized**
-- **Lightweight JWT:** Only user identity, no organization context
-- **Direct API Pattern:** No useAuth context dependency issues
-- **Selective Security:** Protection only where needed
-- **Safe Component Props:** Prevents undefined errors and crashes
-- **Flat URL Structure:** Shorter URLs, faster parsing, better UX
-
-### **🏢 Multi-tenant Ready**
-- **Organization Isolation:** Complete data separation
-- **Dynamic Permissions:** Real-time role checking
-- **Multiple Membership:** Users can belong to multiple organizations
-- **Organization Switching:** No re-login required
-- **Clean URLs:** /{orgSlug}/{deptSlug} pattern
-
-### **🛠️ Developer Experience**
-- **Clear Error Handling:** Comprehensive error states and debug info
-- **Consistent Patterns:** Reusable patterns for all organization pages
-- **Safe Development:** Default values prevent runtime errors
-- **Easy Debugging:** Debug info displayed in error states
-- **Intuitive URLs:** Easy to understand and remember
-
----
-
-## 🚀 Deployment Guide
-
-### Environment Configuration
+**Schema Management:**
 ```bash
-# Production environment variables
-# .env
-# InvenStock - Production Configuration
+pnpm schema:merge       # Merge modular schemas
+pnpm db:generate        # Generate Prisma client
+pnpm db:push           # Push schema to database
+pnpm db:migrate        # Create migration (dev)
+pnpm db:studio         # Open Prisma Studio
+```
 
-# Database Configuration (Neon)
-DATABASE_URL="postgresql://neondb_owner:npg_INhGAa5CDRH8@ep-cold-fog-a1lm4e80-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-DIRECT_URL="postgresql://neondb_owner:npg_INhGAa5CDRH8@ep-cold-fog-a1lm4e80-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+**Seed Data:**
+```bash
+pnpm seeds:merge       # Merge seed files (if modular)
+pnpm db:seed           # Run seed
+pnpm db:seed:demo      # Seed with demo data
+```
 
-# JWT Configuration
-JWT_SECRET="565c8b590ef28ebf5ab45dfe6d4f2d18f26cbe5045e378d425d90d91749dc319"
+**Database Reset:**
+```bash
+pnpm db:reset          # Reset + seed
+pnpm db:reset:demo     # Reset + seed with demo
+pnpm db:fresh          # Full reset + demo seed
+```
+
+**Development Setup:**
+```bash
+pnpm db:setup          # Push schema + seed
+pnpm db:setup:demo     # Push schema + seed demo
+```
+
+### Development Commands
+```bash
+pnpm dev               # Start dev server (with schema merge)
+pnpm build            # Build for production (with schema merge + generate)
+pnpm start            # Start production server
+pnpm lint             # Run ESLint
+pnpm type-check       # TypeScript type checking
+```
+
+---
+
+## 📁 Project File Organization
+
+### Root Level Structure
+```
+project-root/
+├── app/                    # Next.js 15 App Router
+│   ├── page.tsx           # Landing page
+│   ├── layout.tsx         # Root layout
+│   ├── globals.css        # Global styles
+│   ├── login/
+│   ├── register/
+│   ├── dashboard/
+│   ├── requests/
+│   ├── admin/
+│   └── api/               # API routes
+├── components/            # React components
+│   ├── ui/               # Shadcn/UI components
+│   ├── shared/           # Shared components
+│   └── (feature modules)
+├── lib/                   # Utility libraries
+│   ├── auth.ts           # JWT utilities (jose)
+│   ├── auth-server.ts    # Server auth helpers
+│   ├── password.ts       # bcryptjs helpers
+│   ├── file-upload.ts    # File upload utilities
+│   ├── file-validation.ts # File validation
+│   ├── prisma.ts         # Prisma client singleton
+│   └── utils.ts          # General utilities
+├── hooks/                 # Custom React hooks
+│   ├── useAuth.ts
+│   ├── useRequest.ts
+│   └── useComments.ts
+├── types/                 # TypeScript types
+│   ├── auth.d.ts
+│   ├── request.ts
+│   └── comment.ts
+├── prisma/               # Database
+│   ├── schema.prisma     # Main schema (generated)
+│   ├── schemas/          # Modular schemas
+│   └── seed.ts           # Seed file
+├── scripts/              # Build scripts
+│   ├── merge-schemas.js  # Schema merge utility
+│   └── merge-seeds.js    # Seed merge utility
+├── middleware.ts         # Next.js middleware
+└── package.json          # Dependencies
+```
+
+### Lib Directory Purpose
+
+**lib/auth.ts** (JWT utilities):
+- signToken() → Create JWT
+- verifyToken() → Verify JWT
+- Uses `jose` library
+
+**lib/auth-server.ts** (Server helpers):
+- getServerUser() → Get user from cookies
+- getUserFromHeaders() → Get user from middleware headers
+- requireAuth() → Throw if not authenticated
+- requireAdmin() → Throw if not admin
+
+**lib/password.ts** (Password utilities):
+- hashPassword() → Hash with bcryptjs
+- comparePassword() → Verify password
+
+**lib/file-upload.ts** (File storage):
+- uploadFile() → Upload single file to Vercel Blob
+- uploadMultipleFiles() → Upload array of files
+- deleteFile() → Delete file from storage
+
+**lib/file-validation.ts** (File checks):
+- validateFile() → Check size, type, extension
+- sanitizeFilename() → Clean filename
+- Constants: MAX_SIZE, ALLOWED_TYPES
+
+**lib/prisma.ts** (Database client):
+- Singleton Prisma client
+- Prevents multiple instances in development
+
+---
+
+## ⚠️ Security Best Practices
+
+### Input Validation
+
+**Principle:** Never trust client input
+
+**Implementation:**
+- Use `zod` for schema validation
+- Validate on both client and server
+- Server validation is mandatory
+- Sanitize user input (comments, filenames)
+
+### File Upload Security
+
+**Server-side Validation:**
+1. Check file size (before upload)
+2. Verify file type (MIME type)
+3. Validate file extension
+4. Check file content (if critical)
+5. Generate unique storage path
+6. Sanitize filename
+
+**Example Validation Flow:**
+```
+Client uploads file
+  ↓
+Server receives FormData
+  ↓
+Extract file
+  ↓
+Check size (reject if > 10MB)
+  ↓
+Check MIME type (reject if not image/pdf)
+  ↓
+Sanitize filename
+  ↓
+Upload to Vercel Blob
+  ↓
+Store URL in database
+```
+
+### Authentication Security
+
+**JWT Security:**
+- Use HTTP-only cookies (prevent XSS)
+- Set secure flag in production
+- Set sameSite: 'lax' or 'strict'
+- Token expiration: 7 days (configurable)
+
+**Password Security:**
+- Hash with bcryptjs (10 rounds minimum)
+- Never log passwords
+- Never return password in API responses
+- Enforce minimum password length (8+ chars recommended)
+
+### API Route Protection
+
+**Every API route checklist:**
+1. ✅ Authentication check (except public routes)
+2. ✅ Permission check (role-based)
+3. ✅ Input validation (zod schema)
+4. ✅ Ownership check (for user resources)
+5. ✅ Error handling (try-catch)
+6. ✅ Proper HTTP status codes
+
+---
+
+## 🎯 Key Implementation Principles
+
+### 1. Simplicity First
+- Choose simplest solution that works
+- Don't over-engineer
+- Start with MVP, iterate later
+- Avoid premature optimization
+
+### 2. Security by Default
+- Authentication required for all protected routes
+- Permission checks on every API call
+- Server-side validation mandatory
+- Sanitize all user input
+- HTTP-only cookies for tokens
+
+### 3. Data Integrity
+- Foreign key constraints
+- Cascade delete where appropriate
+- Indexed columns for performance
+- Timestamps on all records
+- Status history for transparency
+
+### 4. Developer Experience
+- Clear file organization
+- Consistent naming conventions
+- Component header comments
+- Reusable patterns
+- Type safety with TypeScript
+
+### 5. User Experience
+- Loading states everywhere
+- Clear error messages
+- Optimistic updates where safe
+- Mobile responsive design
+- Fast page loads
+
+### 6. Maintainability
+- Modular components (<200 lines)
+- Custom hooks for shared logic
+- Centralized utilities (lib/)
+- Consistent API patterns
+- Comprehensive error handling
+
+---
+
+## 📦 Dependencies Overview
+
+### Core Framework
+- `next` (15.5.9) → App Router, API Routes
+- `react` (19.2.1) → UI framework
+- `typescript` → Type safety
+
+### Database & ORM
+- `@prisma/client` → Database client
+- `prisma` (devDep) → Schema management
+
+### Authentication & Security
+- `jose` → JWT signing/verification (modern, edge-compatible)
+- `bcryptjs` → Password hashing
+- `@arcjet/next` → Rate limiting, bot protection
+
+### UI & Styling
+- `tailwindcss` (v4) → Utility-first CSS
+- Shadcn/UI components (via @radix-ui/*)
+- `lucide-react` → Icons
+- `class-variance-authority` → Component variants
+- `tailwind-merge` → Class merging utility
+
+### Form Management
+- `react-hook-form` → Form state management
+- `zod` → Schema validation
+- `@hookform/resolvers` → Zod + RHF integration
+
+### UI Utilities
+- `sonner` → Toast notifications
+- `date-fns` → Date formatting/manipulation
+- `framer-motion` → Animations (optional)
+- `cmdk` → Command palette (optional)
+
+### File Handling
+- `papaparse` → CSV parsing (if needed)
+- `xlsx` → Excel export (if needed)
+- `html2canvas` + `jspdf` → PDF generation (if needed)
+
+### Development Tools
+- `tsx` → TypeScript execution
+- `ts-node` → TypeScript Node.js runner
+- `eslint` → Code linting
+- `prettier` → Code formatting (add if needed)
+
+---
+
+## 🚀 Deployment Architecture
+
+### Environment Variables (.env)
+```bash
+# Database (Neon PostgreSQL)
+DATABASE_URL="postgresql://..."
+DIRECT_URL="postgresql://..."
+
+# JWT Secret (generate random string)
+JWT_SECRET="your-256-bit-secret-key"
+
+# File Storage (Vercel Blob)
+BLOB_READ_WRITE_TOKEN="your-blob-token"
 
 # Security (Arcjet)
-ARCJET_KEY="ajkey_01k4fqfvdzeb1sw7sectgh005x"
+ARCJET_KEY="your-arcjet-key"
 
-# Application Configuration
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NODE_ENV="development"
+# Application
+NEXT_PUBLIC_APP_URL="https://your-domain.com"
+NODE_ENV="production"
 ```
+
+### Vercel Configuration Pattern
+```json
+{
+  "framework": "nextjs",
+  "buildCommand": "pnpm schema:merge && pnpm db:generate && next build",
+  "installCommand": "pnpm install",
+  "regions": ["sin1"],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "ARCJET_KEY": "@arcjet_key",
+    "BLOB_READ_WRITE_TOKEN": "@blob_token"
+  }
+}
+```
+
+### Database Migration Strategy
+
+**Development:**
+```bash
+pnpm db:migrate          # Create migration
+pnpm db:push            # Push schema changes (prototyping)
+```
+
+**Production:**
+```bash
+pnpm db:migrate:prod    # Deploy migrations
+# or auto-run via Vercel build command
+```
+
+---
+
+## 📋 Implementation Checklist
+
+### Phase 1: Foundation (Week 1)
+- [ ] Initialize Next.js 15 project
+- [ ] Setup Prisma with modular schemas
+- [ ] Configure Tailwind CSS v4
+- [ ] Install Shadcn/UI components
+- [ ] Setup database (Neon/Supabase)
+- [ ] Create schema merge script
+- [ ] Run initial migration
+
+### Phase 2: Authentication (Week 1-2)
+- [ ] Implement JWT utilities (jose)
+- [ ] Create auth API routes (login, register, logout, me)
+- [ ] Build middleware (auth + route guard)
+- [ ] Create login/register pages
+- [ ] Test authentication flow
+- [ ] Setup Arcjet rate limiting
+
+### Phase 3: Request System (Week 2-3)
+- [ ] Create Request schema
+- [ ] Build request submission form
+- [ ] Implement file upload (Vercel Blob)
+- [ ] Create request listing page
+- [ ] Build request detail page
+- [ ] Test request CRUD operations
+
+### Phase 4: Admin Features (Week 3)
+- [ ] Create admin dashboard
+- [ ] Implement status change system
+- [ ] Build StatusHistory tracking
+- [ ] Add admin filters
+- [ ] Create stats overview
+- [ ] Test admin workflows
+
+### Phase 5: Comment System (Week 3-4)
+- [ ] Create Comment schema
+- [ ] Build comment components
+- [ ] Implement comment API
+- [ ] Add real-time updates (optional)
+- [ ] Test comment permissions
+- [ ] Style comment UI (Facebook-style)
+
+### Phase 6: Polish & Deploy (Week 4)
+- [ ] Add loading states
+- [ ] Implement error handling
+- [ ] Mobile responsive testing
+- [ ] Performance optimization
+- [ ] Security audit
+- [ ] Deploy to Vercel
+- [ ] Production testing
+- [ ] Setup monitoring
+
+---
+
+## 🎓 Development Guidelines Summary
+
+### Code Style
+- TypeScript strict mode
+- Functional components only
+- Custom hooks for shared logic
+- Consistent file naming (kebab-case for files, PascalCase for components)
+
+### Component Rules
+- Max 200 lines per file
+- Header comment with file path
+- Props interface above component
+- Default values for optional props
+- Extract complex JSX to sub-components
+
+### API Route Rules
+- Consistent response format
+- Proper HTTP status codes
+- Error handling with try-catch
+- Input validation with zod
+- Authentication check first
+- Permission check second
+- Business logic last
+
+### Database Rules
+- Use transactions for multi-step operations
+- Include timestamps (createdAt, updatedAt)
+- Cascade delete where appropriate
+- Index frequently queried columns
+- Use enums for fixed value sets
+
+### Security Rules
+- Never trust client input
+- Validate on server always
+- Use HTTP-only cookies for tokens
+- Hash passwords with bcryptjs
+- Sanitize file uploads
+- Rate limit sensitive endpoints
+
+---
+
+## 📚 Reference Patterns
+
+### Custom Hook Pattern
+```typescript
+// hooks/useRequest.ts
+export function useRequest(requestId: string) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    async function fetchRequest() {
+      try {
+        const res = await fetch(`/api/requests/${requestId}`);
+        const json = await res.json();
+        setData(json.data);
+      } catch (err) {
+        setError(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchRequest();
+  }, [requestId]);
+  
+  return { data, loading, error };
+}
+```
+
+### Server Action Pattern (Optional - for form submissions)
+```typescript
+// app/actions/request.ts
+'use server';
+
+export async function createRequest(formData: FormData) {
+  // Validation
+  // Database operation
+  // Return result
+}
+```
+
+### Error Boundary Pattern
+```typescript
+// components/shared/ErrorBoundary.tsx
+'use client';
+
+export default function ErrorBoundary({ error, reset }) {
+  return (
+    <div className="error-container">
+      <h2>Something went wrong</h2>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+---
+
+## 🎯 Success Metrics (Not Revenue-Based)
+
+**Quality Metrics:**
+- Number of published sandbox cases
+- Diversity of solved pain points
+- Request completion rate
+- Average time to completion
+
+**Engagement Metrics:**
+- Number of active requesters
+- Comment activity per request
+- Repeat request submissions
+- User retention rate
+
+**Impact Metrics:**
+- External references/citations
+- Community contribution growth
+- Solved pain point categories
+- Knowledge sharing reach
+
+---
+
+## 🔄 Future Enhancements (Post-MVP)
+
+**Phase 2 Features:**
+- Request voting system
+- Email notifications
+- Real-time updates (WebSocket)
+- Advanced search and filters
+- Request templates
+- Duplicate detection
+- Export functionality
+
+**Phase 3 Features:**
+- Project showcase section
+- Public API for integrations
+- Analytics dashboard
+- Batch operations
+- Advanced admin tools
+- Collaboration features
+
+---
+
+**End of Instructions**
+
+คำแนะนำนี้ครอบคลุม high-level architecture และ implementation principles  
+สำหรับ detailed implementation, ให้ดูที่ existing codebase patterns และ adapt ตามต้องการ
+
+**Remember:** Start simple, iterate based on real usage, maintain security, and focus on user value.
