@@ -1,0 +1,72 @@
+// prisma/schemas/audit.prisma
+// ===== PRODUCTION-READY AUDIT SYSTEM WITH USER SNAPSHOTS =====
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  
+  // Actor (ผู้ทำ)
+  userId         String?
+  userSnapshot   Json?
+  
+  // Target (ผู้ถูกกระทำ)
+  targetUserId   String?
+  targetSnapshot Json?
+  
+  // Department Context
+  departmentId   String?
+  
+  // Action Classification
+  action         String
+  category       AuditCategory
+  severity       AuditSeverity @default(INFO)
+  
+  // Human-Readable Description
+  description    String
+  
+  // Resource Tracking
+  resourceId     String?
+  resourceType   String?
+  
+  // Detailed Data
+  payload        Json?
+  
+  // Request Context
+  ipAddress      String?
+  userAgent      String?
+  
+  // Timestamp
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User? @relation("AuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
+  targetUser     User? @relation("AuditLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  
+  // Optimized Indexes
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([departmentId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@index([category, severity])
+  @@index([resourceId])
+  @@map("audit_logs")
+}
+
+enum AuditCategory {
+  PRODUCT
+  STOCK
+  TRANSFER
+  USER
+  ORGANIZATION
+  DEPARTMENT
+  AUTH
+  SYSTEM
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}

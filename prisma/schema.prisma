@@ -1,0 +1,790 @@
+// This file is auto-generated. Do not edit manually.
+// Edit files in prisma/schemas/ directory instead.
+// Last generated: 2025-12-25T14:43:02.730Z
+// InvenStock - Multi-Tenant Inventory Management System V1.0
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema", "relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // For connection pooling
+}
+
+
+// ==========================================
+// BASE SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/base.prisma
+// ===== MINIMAL CORE ENUMS - Invite Code Only System =====
+
+// ===== USER & ORGANIZATION ENUMS =====
+enum UserStatus {
+  PENDING    // รอการยืนยัน email
+  ACTIVE     // ใช้งานได้
+  SUSPENDED  // ระงับการใช้งาน
+  INACTIVE   // ไม่ใช้งาน
+}
+
+enum OrganizationStatus {
+  ACTIVE     // ใช้งานได้
+  SUSPENDED  // ระงับ
+  TRIAL      // ทดลองใช้
+}
+
+// ===== SIMPLIFIED ROLE SYSTEM =====
+enum OrganizationRole {
+  MEMBER  // ทำงานทั่วไป เบิก จ่าย แก้สต็อก ดูทุกหน่วยงาน
+  ADMIN   // Member + CRUD สินค้า/หน่วยงาน + เชิญผู้ใช้ 
+  OWNER   // Admin + จัดการองค์กร + ตั้งค่าระบบ
+}
+
+// ===== UI ENUMS FOR COLORS & ICONS =====
+enum ColorTheme {
+  BLUE         // #3B82F6 - สีน้ำเงิน
+  GREEN        // #10B981 - สีเขียว
+  RED          // #EF4444 - สีแดง
+  YELLOW       // #F59E0B - สีเหลือง
+  PURPLE       // #8B5CF6 - สีม่วง
+  PINK         // #EC4899 - สีชมพู
+  INDIGO       // #6366F1 - สีน้ำเงินเข้ม
+  TEAL         // #14B8A6 - สีเขียวฟ้า
+  ORANGE       // #F97316 - สีส้ม
+  GRAY         // #6B7280 - สีเทา
+  SLATE        // #475569 - สีเทาเข้ม
+  EMERALD      // #059669 - สีเขียวมรกต
+}
+
+enum IconType {
+  // Department Icons
+  BUILDING     // 🏢 สำนักงาน
+  HOSPITAL     // 🏥 โรงพยาบาล
+  PHARMACY     // 💊 ร้านยา
+  WAREHOUSE    // 📦 คลังสินค้า
+  LABORATORY   // 🧪 ห้องแล็บ
+  
+  // Product Category Icons
+  PILL         // 💊 ยาเม็ด
+  BOTTLE       // 🍼 ยาน้ำ
+  SYRINGE      // 💉 ยาฉีด
+  BANDAGE      // 🩹 อุปกรณ์การแพทย์
+  STETHOSCOPE  // 🩺 เครื่องมือแพทย์
+  
+  // Role Icons
+  CROWN        // 👑 เจ้าของ
+  SHIELD       // 🛡์ ผู้จัดการ
+  PERSON       // 👤 พนักงาน
+  EYE          // 👁️ ผู้ตรวจสอบ
+  GEAR         // ⚙️ ระบบ
+  
+  // General Icons
+  BOX          // 📦 กล่อง
+  FOLDER       // 📁 โฟลเดอร์
+  TAG          // 🏷️ ป้ายกำกับ
+  STAR         // ⭐ ดาว
+  HEART        // ❤️ หัวใจ
+  CIRCLE       // ⚪ วงกลม
+  SQUARE       // ⬜ สี่เหลี่ยม
+  TRIANGLE     // 🔺 สามเหลี่ยม
+}
+
+// ===== ✅ NEW: USER SNAPSHOT TYPE =====
+// ใช้ใน Audit Logs และ Records ต่างๆ เพื่อเก็บข้อมูล user ณ ขณะนั้น
+// Structure:
+// {
+//   "userId": "clxxx",
+//   "username": "admin01",
+//   "fullName": "สมชาย ใจดี",
+//   "email": "somchai@hospital.com",
+//   "role": "ADMIN" // Role ณ ขณะนั้น (ถ้ามี context)
+// }
+
+// ==========================================
+// USER SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/user.prisma
+// ===== USER MANAGEMENT SCHEMA - Clean & Simple =====
+
+model User {
+  id          String     @id @default(cuid())
+  email       String?    // Optional for notifications/recovery
+  username    String     @unique  // Primary login credential
+  password    String     // bcrypt hashed
+  
+  // Personal Information
+  firstName   String
+  lastName    String
+  phone       String?
+  
+  // Account Status
+  status      UserStatus @default(PENDING)
+  isActive    Boolean    @default(true)
+  emailVerified Boolean  @default(false)
+  
+  // Security
+  lastLogin   DateTime?
+  
+  // Timestamps
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  // Relations
+  organizationUsers   OrganizationUser[]
+  auditLogsAsUser     AuditLog[] @relation("AuditLogUser")
+  auditLogsAsTarget   AuditLog[] @relation("AuditLogTarget")
+  
+  @@index([email])
+  @@index([username])
+  @@index([status])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ==========================================
+// ORGANIZATION SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/organization.prisma
+// ===== ORGANIZATION SCHEMA WITH USER SNAPSHOTS =====
+
+model Organization {
+  id          String             @id @default(cuid())
+  name        String
+  slug        String             @unique
+  description String?
+  
+  // Contact Information
+  email       String?
+  phone       String?
+  
+  // Visual Customization
+  color       ColorTheme?        @default(BLUE)
+  icon        IconType?          @default(BUILDING)
+  
+  // Settings
+  status      OrganizationStatus @default(ACTIVE)
+  timezone    String             @default("Asia/Bangkok")
+  
+  // Invite Code System
+  inviteCode     String?    @unique
+  inviteEnabled  Boolean    @default(true)
+  
+  // Timestamps
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  
+  // Relations
+  users       OrganizationUser[]
+  departments Department[]
+  auditLogs   AuditLog[]
+  
+  // Product-related relations
+  products              Product[]
+  productAttributeCategories ProductAttributeCategory[]
+  productUnits          ProductUnit[]
+  stocks                Stock[]
+  
+  // Transfer relations
+  transfers             Transfer[]
+  
+  @@index([slug])
+  @@index([status])
+  @@index([inviteCode])
+  @@map("organizations")
+}
+
+// User-Organization Relationship
+model OrganizationUser {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  
+  // Role & Membership
+  roles          OrganizationRole @default(MEMBER)
+  isOwner        Boolean      @default(false)
+  joinedAt       DateTime     @default(now())
+  lastActiveAt   DateTime?
+  
+  // Status
+  isActive       Boolean      @default(true)
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([organizationId, userId])
+  @@index([isActive])
+  @@index([roles])
+  @@map("organization_users")
+}
+
+// Department with User Snapshots + Transfer relations
+model Department {
+  id             String       @id @default(cuid())
+  organizationId String
+  parentId       String?
+  
+  // Department Details
+  name           String
+  slug           String
+  description    String?
+  color          ColorTheme?
+  icon           IconType?
+  
+  // Status
+  isActive       Boolean      @default(true)
+  
+  // User Tracking
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  // Timestamps
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children       Department[] @relation("DepartmentHierarchy")
+  auditLogs      AuditLog[]
+  stocks         Stock[]
+  
+  // Transfer relations
+  outgoingTransfers Transfer[] @relation("TransferSupplying")
+  incomingTransfers Transfer[] @relation("TransferRequesting")
+  
+  @@unique([organizationId, slug])
+  @@index([parentId])
+  @@index([isActive])
+  @@map("departments")
+}
+
+// ==========================================
+// PRODUCT SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/product.prisma
+
+// ===== PRODUCT UNIT (SIMPLIFIED) =====
+model ProductUnit {
+  id               String   @id @default(cuid())
+  organizationId   String
+  
+  // Basic Info
+  name             String   // "โหล", "ลัง", "กล่อง"
+  conversionRatio  Decimal  @db.Decimal(10, 4)  // 1 โหล = 12 หน่วย
+  
+  // Status
+  isActive         Boolean  @default(true)
+  
+  // User Tracking
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  // Timestamps
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  // Relations
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("product_units")
+}
+
+// ===== PRODUCT ATTRIBUTE CATEGORY (Definition) =====
+model ProductAttributeCategory {
+  id             String   @id @default(cuid())
+  organizationId String
+  
+  // Category Info
+  key            String   // "dosage_form", "drug_type", "manufacturer"
+  label          String   // "รูปแบบยา", "ประเทศผู้ผลิต"
+  description    String?
+  
+  // Display & Validation
+  displayOrder   Int      @default(0)
+  isRequired     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  
+  // User Tracking
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // ✅ Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  options        ProductAttributeOption[]
+  productAttributes ProductAttribute[]
+  
+  @@unique([organizationId, key])
+  @@index([organizationId, isActive])
+  @@map("product_attribute_categories")
+}
+
+// ===== PRODUCT ATTRIBUTE OPTION (Values for each category) =====
+model ProductAttributeOption {
+  id         String   @id @default(cuid())
+  categoryId String
+  
+  value      String   // "ยาเม็ด", "ยาน้ำ", "ไทย", "ญี่ปุ่น"
+  label      String?  // Optional display label
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // ✅ Relations
+  category   ProductAttributeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  productAttributes ProductAttribute[]
+  
+  @@unique([categoryId, value])
+  @@index([categoryId, isActive])
+  @@map("product_attribute_options")
+}
+
+// ===== PRODUCT ATTRIBUTE (Junction table connecting Product + Category + Option) =====
+model ProductAttribute {
+  id         String   @id @default(cuid())
+  productId  String
+  categoryId String
+  optionId   String
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // ✅ Relations
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   ProductAttributeCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  option     ProductAttributeOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  
+  @@unique([productId, categoryId])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([optionId])
+  @@map("product_attributes")
+}
+
+// ===== UPDATED PRODUCT MODEL =====
+model Product {
+  id             String   @id @default(cuid())
+  organizationId String
+  
+  // Basic Info
+  code           String
+  name           String
+  genericName    String?
+  description    String?
+  
+  baseUnit       String
+  isActive       Boolean  @default(true)
+  
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // ✅ Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attributes     ProductAttribute[]
+  stocks         Stock[]
+  transferItems  TransferItem[]
+  
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+  @@map("products")
+}
+
+// ==========================================
+// STOCK SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/stock.prisma
+// ===== STOCK SCHEMA - DEPARTMENT-LEVEL INVENTORY =====
+
+// ===== STOCK (SUMMARY LEVEL - NO QUANTITIES) =====
+model Stock {
+  id             String   @id @default(cuid())
+  organizationId String
+  departmentId   String
+  productId      String
+  
+  // Stock Location (within department)
+  location       String?  // ชั้น A-1, ตู้ยา B, ห้องเย็น
+  
+  // ✅ Department-specific Thresholds
+  minStockLevel  Int?     // แจ้งเตือนเมื่อต่ำกว่า
+  maxStockLevel  Int?     // สูงสุดที่ควรเก็บ
+  reorderPoint   Int?     // จุดสั่งซื้อใหม่
+  
+  // ✅ Default Withdrawal Quantity
+  defaultWithdrawalQty Int?  // จำนวนเบิกคงที่
+  
+  // Status
+  lastStockCheck DateTime?
+  lastMovement   DateTime?
+  
+  // ✅ USER TRACKING
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockBatches   StockBatch[]
+  
+  @@unique([departmentId, productId])
+  @@index([organizationId, departmentId])
+  @@map("stocks")
+}
+
+// ===== STOCK BATCH (ACTUAL INVENTORY WITH QUANTITIES) =====
+model StockBatch {
+  id             String   @id @default(cuid())
+  stockId        String
+  
+  // ✅ Batch Info
+  lotNumber      String
+  expiryDate     DateTime?
+  manufactureDate DateTime?
+  supplier       String?
+  
+  // ✅ Pricing
+  costPrice      Decimal? @db.Decimal(10, 2)
+  sellingPrice   Decimal? @db.Decimal(10, 2)
+  
+  // ✅ Quantity Tracking
+  totalQuantity      Int @default(0)  // รวมจำนวนทั้งหมด
+  availableQuantity  Int @default(0)  // ว่าง = total - reserved - incoming
+  reservedQuantity   Int @default(0)  // จองสำหรับ approved transfers
+  incomingQuantity   Int @default(0)  // รอรับเข้า (pending incoming)
+  
+  // Location
+  location       String?  // ชั้น A-1-05, ตู้ยาช่องที่ 3
+  
+  // ✅ Status
+  status         BatchStatus @default(AVAILABLE)
+  isActive       Boolean     @default(true)
+  
+  // User Tracking
+  createdBy         String
+  createdBySnapshot Json?
+  updatedBy         String?
+  updatedBySnapshot Json?
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  receivedAt     DateTime @default(now())
+  
+  // Relations
+  stock          Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  transferBatches TransferBatch[]  // ✅ ADDED: Opposite relation for Transfer system
+  
+  @@unique([stockId, lotNumber])
+  @@index([expiryDate])
+  @@index([status, isActive])
+  @@index([availableQuantity]) // For stock availability checks
+  @@map("stock_batches")
+}
+
+// ✅ Batch Status Enum
+enum BatchStatus {
+  AVAILABLE    // พร้อมใช้
+  RESERVED     // จองไว้สำหรับ transfer
+  QUARANTINE   // กักกัน
+  DAMAGED      // เสียหาย
+  EXPIRED      // หมดอายุ
+}
+
+// ==========================================
+// AUDIT SCHEMA - V1.0
+// ==========================================
+
+// prisma/schemas/audit.prisma
+// ===== PRODUCTION-READY AUDIT SYSTEM WITH USER SNAPSHOTS =====
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  
+  // Actor (ผู้ทำ)
+  userId         String?
+  userSnapshot   Json?
+  
+  // Target (ผู้ถูกกระทำ)
+  targetUserId   String?
+  targetSnapshot Json?
+  
+  // Department Context
+  departmentId   String?
+  
+  // Action Classification
+  action         String
+  category       AuditCategory
+  severity       AuditSeverity @default(INFO)
+  
+  // Human-Readable Description
+  description    String
+  
+  // Resource Tracking
+  resourceId     String?
+  resourceType   String?
+  
+  // Detailed Data
+  payload        Json?
+  
+  // Request Context
+  ipAddress      String?
+  userAgent      String?
+  
+  // Timestamp
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User? @relation("AuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
+  targetUser     User? @relation("AuditLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  
+  // Optimized Indexes
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([departmentId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@index([category, severity])
+  @@index([resourceId])
+  @@map("audit_logs")
+}
+
+enum AuditCategory {
+  PRODUCT
+  STOCK
+  TRANSFER
+  USER
+  ORGANIZATION
+  DEPARTMENT
+  AUTH
+  SYSTEM
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// ==========================================
+// TRANSFER SCHEMA - ADDITIONAL
+// ==========================================
+
+// prisma/schemas/transfer.prisma
+// ===== TRANSFER SYSTEM - Department to Department =====
+// ✅ UPDATED: Match UI Types 100%
+
+// ===== TRANSFER REQUEST (Organization Level) =====
+model Transfer {
+  id             String   @id @default(cuid())
+  organizationId String
+  
+  // Transfer Reference
+  code           String   // ✅ CHANGED: transferCode → code (match UI)
+  title          String   // "ขอเบิกยาฉุกเฉิน OPD"
+  
+  // Department Context
+  requestingDepartmentId String  // หน่วยงานที่ขอเบิก (destination)
+  supplyingDepartmentId  String  // หน่วยงานที่จ่าย (source)
+  
+  // Request Info
+  requestReason  String?  // เหตุผลในการขอเบิก
+  notes          String?  // หมายเหตุเพิ่มเติม
+  priority       TransferPriority @default(NORMAL)
+  
+  // ✅ CHANGED: Transfer-Level Status (เก็บทั้ง UI และ computed)
+  status         TransferStatus @default(PENDING)  // UI status (includes APPROVED/PREPARED/DELIVERED)
+  
+  // Timeline
+  requestedAt    DateTime  @default(now())
+  approvedAt     DateTime?
+  preparedAt     DateTime?  // ✅ ADDED: For UI timeline
+  deliveredAt    DateTime?  // ✅ ADDED: For UI timeline
+  cancelledAt    DateTime?
+  
+  // Cancellation
+  cancelReason   String?
+  
+  // User Tracking
+  requestedBy         String
+  requestedBySnapshot Json?
+  
+  // ✅ REMOVED: approvedBy, cancelledBy (ไม่จำเป็นใน transfer level)
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestingDepartment Department  @relation("TransferRequesting", fields: [requestingDepartmentId], references: [id], onDelete: Restrict)
+  supplyingDepartment  Department  @relation("TransferSupplying", fields: [supplyingDepartmentId], references: [id], onDelete: Restrict)
+  
+  items          TransferItem[]
+  statusHistory  TransferHistory[]
+  
+  // Indexes
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([requestingDepartmentId, status])
+  @@index([supplyingDepartmentId, status])
+  @@index([requestedAt])
+  @@index([status, priority])
+  @@map("transfers")
+}
+
+// ===== TRANSFER ITEMS (Item-Level Status) =====
+model TransferItem {
+  id             String   @id @default(cuid())
+  transferId     String
+  
+  // ✅ CHANGED: Product Info (ไม่ต้องเก็บ snapshot ซ้ำ - join กับ Product table)
+  productId      String
+  
+  // Item-Level Status
+  status         TransferItemStatus @default(PENDING)
+  
+  // Quantity Tracking
+  requestedQuantity Int
+  approvedQuantity  Int?
+  preparedQuantity  Int?
+  receivedQuantity  Int?
+  
+  // Notes
+  notes          String?
+  cancelReason   String?  // ✅ CHANGED: rejectReason → cancelReason (match UI)
+  
+  // Timeline
+  approvedAt     DateTime?
+  preparedAt     DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  
+  // ✅ REMOVED: User Tracking (ใช้ History แทน - avoid duplication)
+  
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  transfer       Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batches        TransferBatch[]  // ✅ ADDED: Separate table instead of JSON
+  
+  // Indexes
+  @@index([transferId])
+  @@index([productId])
+  @@index([status])
+  @@index([transferId, status])
+  @@map("transfer_items")
+}
+
+// ===== TRANSFER BATCH (Batch Selection) =====
+// ✅ ADDED: Separate table for batches (better than JSON)
+model TransferBatch {
+  id              String   @id @default(cuid())
+  transferItemId  String
+  batchId         String
+  quantity        Int      // จำนวนที่จัดเตรียม
+  receivedQuantity Int?    // ✅ NEW: จำนวนที่รับเข้าจริง
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  
+  // Relations
+  transferItem    TransferItem @relation(fields: [transferItemId], references: [id], onDelete: Cascade)
+  batch           StockBatch   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  
+  // Indexes
+  @@index([transferItemId])
+  @@index([batchId])
+  @@map("transfer_batches")
+}
+
+// ===== TRANSFER HISTORY (Audit Trail) =====
+// ✅ CHANGED: Rename to match UI types
+model TransferHistory {
+  id             String   @id @default(cuid())
+  transferId     String
+  itemId         String?  // สำหรับ item-level actions
+  
+  // ✅ CHANGED: Action info (match UI types)
+  action         String   // "APPROVED", "PREPARED", "DELIVERED", "CANCELLED"
+  fromStatus     String?
+  toStatus       String?
+  
+  // Who & Why
+  changedBy         String
+  changedBySnapshot Json?
+  notes          String?
+  
+  // Timestamp
+  createdAt      DateTime @default(now())
+  
+  // Relations
+  transfer       Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([transferId, createdAt(sort: Desc)])
+  @@index([itemId])
+  @@map("transfer_histories")
+}
+
+// ===== ENUMS =====
+// ✅ CHANGED: Match UI types exactly
+enum TransferStatus {
+  PENDING      // รอดำเนินการ
+  APPROVED     // อนุมัติแล้ว (all items approved)
+  PREPARED     // จัดเตรียมแล้ว (all items prepared)
+  DELIVERED    // รับเข้าแล้ว (all items delivered)
+  PARTIAL      // ดำเนินการบางส่วน
+  COMPLETED    // เสร็จสมบูรณ์ (alias for DELIVERED)
+  CANCELLED    // ยกเลิก
+}
+
+enum TransferItemStatus {
+  PENDING      // รอการอนุมัติ
+  APPROVED     // อนุมัติแล้ว
+  PREPARED     // จัดเตรียมแล้ว
+  DELIVERED    // รับเข้าแล้ว
+  CANCELLED    // ยกเลิก
+}
+
+enum TransferPriority {
+  NORMAL       // ปกติ
+  URGENT       // ด่วน
+  CRITICAL     // ด่วนมาก
+}
