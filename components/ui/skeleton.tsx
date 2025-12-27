@@ -2,7 +2,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
 
 export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -24,40 +23,20 @@ const Skeleton = React.forwardRef<HTMLDivElement, SkeletonProps>(
     },
     ref
   ) => {
-    const baseClasses = "bg-muted relative overflow-hidden"
-    
     const variantClasses = {
-      text: "rounded",
+      text: "rounded-lg",
       circular: "rounded-full",
-      rectangular: "rounded-md",
-    }
-
-    const animationComponent = () => {
-      if (animation === "wave") {
-        return (
-          <motion.div
-            className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent"
-            animate={{
-              translateX: ["100%", "200%"],
-            }}
-            transition={{
-              repeat: Infinity,
-              duration: 1.5,
-              ease: "linear",
-            }}
-          />
-        )
-      }
-      return null
+      rectangular: "rounded-xl",
     }
 
     return (
       <div
         ref={ref}
         className={cn(
-          baseClasses,
+          "bg-default-200 relative overflow-hidden",
           variantClasses[variant],
           animation === "pulse" && "animate-pulse",
+          animation === "wave" && "before:absolute before:inset-0 before:-translate-x-full before:animate-shimmer before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent",
           className
         )}
         style={{
@@ -65,9 +44,7 @@ const Skeleton = React.forwardRef<HTMLDivElement, SkeletonProps>(
           height: height || (variant === "text" ? "1em" : "20px"),
         }}
         {...props}
-      >
-        {animation === "wave" && animationComponent()}
-      </div>
+      />
     )
   }
 )
@@ -101,7 +78,7 @@ export const SkeletonAvatar = ({ size = 40, ...props }: { size?: number } & Reac
 
 export const SkeletonCard = ({ ...props }: React.HTMLAttributes<HTMLDivElement>) => {
   return (
-    <div className="space-y-4 p-4 border rounded-lg" {...props}>
+    <div className="space-y-4 p-4 border-2 border-default-200 rounded-xl" {...props}>
       <div className="flex items-center space-x-4">
         <SkeletonAvatar />
         <div className="space-y-2 flex-1">

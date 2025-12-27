@@ -2,23 +2,27 @@
 "use client"
 
 import * as React from "react"
-import { motion, HTMLMotionProps } from "motion/react"
 import { cn } from "@/lib/utils"
 
-export interface InputProps extends Omit<HTMLMotionProps<"input">, "size"> {
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, error, ...props }, ref) => {
     return (
-      <motion.input
+      <input
         type={type}
         className={cn(
-          "flex h-9 w-full rounded-lg border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-11 w-full rounded-xl border-2 bg-default-50 px-4 py-2.5 text-sm shadow-sm",
+          "transition-all duration-200",
+          "placeholder:text-default-400",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-default-900",
           error
-            ? "border-red-500 focus-visible:ring-red-500"
-            : "border-input focus-visible:ring-blue-500",
+            ? "border-danger focus-visible:border-danger focus-visible:ring-danger/20"
+            : "border-default-200 focus-visible:border-primary focus-visible:ring-primary/20",
           className
         )}
         ref={ref}

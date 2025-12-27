@@ -2,7 +2,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from "motion/react"
 import { cn } from "@/lib/utils"
 
 export interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -32,9 +31,9 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
     return (
       <div className="w-full">
         {showLabel && (
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-muted-foreground">Progress</span>
-            <span className="text-muted-foreground">{Math.round(percentage)}%</span>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-default-600 font-medium">Progress</span>
+            <span className="text-default-900 font-semibold">{Math.round(percentage)}%</span>
           </div>
         )}
         <div
@@ -44,16 +43,17 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
           aria-valuemin={0}
           aria-valuemax={max}
           className={cn(
-            "relative h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800",
+            "relative h-2.5 w-full overflow-hidden rounded-full bg-default-200 dark:bg-default-800",
             className
           )}
           {...props}
         >
-          <motion.div
-            className={cn("h-full rounded-full", getVariantColor())}
-            initial={{ width: 0 }}
-            animate={{ width: `${percentage}%` }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-500 ease-out",
+              getVariantColor()
+            )}
+            style={{ width: `${percentage}%` }}
           />
         </div>
       </div>

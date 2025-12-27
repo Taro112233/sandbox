@@ -1,3 +1,6 @@
+// components/ui/empty.tsx
+"use client"
+
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -7,7 +10,7 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty"
       className={cn(
-        "flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed p-6 text-center text-balance md:p-12",
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-xl border-2 border-dashed border-default-200 p-8 text-center text-balance md:p-16",
         className
       )}
       {...props}
@@ -20,7 +23,7 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty-header"
       className={cn(
-        "flex max-w-sm flex-col items-center gap-2 text-center",
+        "flex max-w-md flex-col items-center gap-3 text-center",
         className
       )}
       {...props}
@@ -29,12 +32,12 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 const emptyMediaVariants = cva(
-  "flex shrink-0 items-center justify-center mb-2 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "flex shrink-0 items-center justify-center mb-3 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default: "bg-transparent",
-        icon: "bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg:not([class*='size-'])]:size-6",
+        icon: "bg-default-100 text-default-900 flex size-12 shrink-0 items-center justify-center rounded-xl shadow-sm [&_svg:not([class*='size-'])]:size-6",
       },
     },
     defaultVariants: {
@@ -62,7 +65,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty-title"
-      className={cn("text-lg font-medium tracking-tight", className)}
+      className={cn("text-xl font-semibold tracking-tight text-default-900", className)}
       {...props}
     />
   )
@@ -73,7 +76,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
     <div
       data-slot="empty-description"
       className={cn(
-        "text-muted-foreground [&>a:hover]:text-primary text-sm/relaxed [&>a]:underline [&>a]:underline-offset-4",
+        "text-default-600 text-sm leading-relaxed [&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4 [&>a]:transition-colors [&>a]:duration-200",
         className
       )}
       {...props}
@@ -86,7 +89,7 @@ function EmptyContent({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty-content"
       className={cn(
-        "flex w-full max-w-sm min-w-0 flex-col items-center gap-4 text-sm text-balance",
+        "flex w-full max-w-md min-w-0 flex-col items-center gap-5 text-sm text-balance",
         className
       )}
       {...props}

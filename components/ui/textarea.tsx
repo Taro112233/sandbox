@@ -2,22 +2,26 @@
 "use client"
 
 import * as React from "react"
-import { motion, HTMLMotionProps } from "motion/react"
 import { cn } from "@/lib/utils"
 
-export interface TextareaProps extends Omit<HTMLMotionProps<"textarea">, "size"> {
+export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: boolean
 }
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, error, ...props }, ref) => {
     return (
-      <motion.textarea
+      <textarea
         className={cn(
-          "flex min-h-[60px] w-full rounded-lg border bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+          "flex min-h-[80px] w-full rounded-xl border-2 bg-default-50 px-4 py-3 text-sm shadow-sm",
+          "transition-all duration-200",
+          "placeholder:text-default-400",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "resize-y",
           error
-            ? "border-red-500 focus-visible:ring-red-500"
-            : "border-input focus-visible:ring-blue-500",
+            ? "border-danger focus-visible:border-danger focus-visible:ring-danger/20"
+            : "border-default-200 focus-visible:border-primary focus-visible:ring-primary/20",
           className
         )}
         ref={ref}

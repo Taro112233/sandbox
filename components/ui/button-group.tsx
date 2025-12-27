@@ -1,11 +1,12 @@
+// components/ui/button-group.tsx
+import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 
 const buttonGroupVariants = cva(
-  "flex w-fit items-stretch [&>*]:focus-visible:z-10 [&>*]:focus-visible:relative [&>[data-slot=select-trigger]:not([class*='w-'])]:w-fit [&>input]:flex-1 has-[select[aria-hidden=true]:last-child]:[&>[data-slot=select-trigger]:last-of-type]:rounded-r-md has-[>[data-slot=button-group]]:gap-2",
+  "flex w-fit items-stretch [&>*]:focus-visible:z-10 [&>*]:focus-visible:relative [&>[data-slot=select-trigger]:not([class*='w-'])]:w-fit [&>input]:flex-1 has-[select[aria-hidden=true]:last-child]:[&>[data-slot=select-trigger]:last-of-type]:rounded-r-xl has-[>[data-slot=button-group]]:gap-2",
   {
     variants: {
       orientation: {
@@ -21,13 +22,10 @@ const buttonGroupVariants = cva(
   }
 )
 
-function ButtonGroup({
-  className,
-  orientation,
-  ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupVariants>) {
-  return (
+const ButtonGroup = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof buttonGroupVariants>>(
+  ({ className, orientation, ...props }, ref) => (
     <div
+      ref={ref}
       role="group"
       data-slot="button-group"
       data-orientation={orientation}
@@ -35,45 +33,43 @@ function ButtonGroup({
       {...props}
     />
   )
-}
+)
+ButtonGroup.displayName = "ButtonGroup"
 
-function ButtonGroupText({
-  className,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"div"> & {
-  asChild?: boolean
-}) {
-  const Comp = asChild ? Slot : "div"
+const ButtonGroupText = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { asChild?: boolean }>(
+  ({ className, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "div"
 
-  return (
-    <Comp
-      className={cn(
-        "bg-muted flex items-center gap-2 rounded-md border px-4 text-sm font-medium shadow-xs [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
-        className
-      )}
-      {...props}
-    />
-  )
-}
+    return (
+      <Comp
+        ref={ref}
+        className={cn(
+          "bg-default-100 flex items-center gap-2 rounded-xl border-2 border-default-200 px-4 py-2.5 text-sm font-medium shadow-sm",
+          "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+          className
+        )}
+        {...props}
+      />
+    )
+  }
+)
+ButtonGroupText.displayName = "ButtonGroupText"
 
-function ButtonGroupSeparator({
-  className,
-  orientation = "vertical",
-  ...props
-}: React.ComponentProps<typeof Separator>) {
-  return (
+const ButtonGroupSeparator = React.forwardRef<React.ElementRef<typeof Separator>, React.ComponentPropsWithoutRef<typeof Separator>>(
+  ({ className, orientation = "vertical", ...props }, ref) => (
     <Separator
+      ref={ref}
       data-slot="button-group-separator"
       orientation={orientation}
       className={cn(
-        "bg-input relative !m-0 self-stretch data-[orientation=vertical]:h-auto",
+        "bg-default-200 relative !m-0 self-stretch data-[orientation=vertical]:h-auto",
         className
       )}
       {...props}
     />
   )
-}
+)
+ButtonGroupSeparator.displayName = "ButtonGroupSeparator"
 
 export {
   ButtonGroup,

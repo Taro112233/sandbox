@@ -4,7 +4,6 @@
 import * as React from "react"
 import { OTPInput, OTPInputContext } from "input-otp"
 import { MinusIcon } from "lucide-react"
-
 import { cn } from "@/lib/utils"
 
 function InputOTP({
@@ -18,7 +17,7 @@ function InputOTP({
     <OTPInput
       data-slot="input-otp"
       containerClassName={cn(
-        "flex items-center gap-2 has-disabled:opacity-50",
+        "flex items-center gap-2.5 has-disabled:opacity-50",
         containerClassName
       )}
       className={cn("disabled:cursor-not-allowed", className)}
@@ -31,7 +30,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-otp-group"
-      className={cn("flex items-center", className)}
+      className={cn("flex items-center gap-1", className)}
       {...props}
     />
   )
@@ -52,7 +51,17 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        "data-[active=true]:border-ring data-[active=true]:ring-ring/50 data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40 aria-invalid:border-destructive data-[active=true]:aria-invalid:border-destructive dark:bg-input/30 border-input relative flex h-9 w-9 items-center justify-center border-y border-r text-sm shadow-xs transition-all outline-none first:rounded-l-md first:border-l last:rounded-r-md data-[active=true]:z-10 data-[active=true]:ring-[3px]",
+        "relative flex h-11 w-11 items-center justify-center",
+        "border-2 border-default-200 bg-default-50 text-sm font-medium shadow-sm",
+        "transition-all duration-200 outline-none",
+        "first:rounded-l-xl last:rounded-r-xl",
+        "border-r-0 last:border-r-2",
+        // Active state
+        "data-[active=true]:z-10 data-[active=true]:border-primary data-[active=true]:ring-2 data-[active=true]:ring-primary/20",
+        // Error state
+        "aria-invalid:border-danger data-[active=true]:aria-invalid:border-danger data-[active=true]:aria-invalid:ring-danger/20",
+        // Dark mode
+        "dark:bg-default-100/30",
         className
       )}
       {...props}
@@ -60,7 +69,7 @@ function InputOTPSlot({
       {char}
       {hasFakeCaret && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="animate-caret-blink bg-foreground h-4 w-px duration-1000" />
+          <div className="animate-caret-blink bg-default-900 h-5 w-px duration-1000" />
         </div>
       )}
     </div>
@@ -69,8 +78,13 @@ function InputOTPSlot({
 
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="input-otp-separator" role="separator" {...props}>
-      <MinusIcon />
+    <div 
+      data-slot="input-otp-separator" 
+      role="separator"
+      className="flex items-center justify-center text-default-400"
+      {...props}
+    >
+      <MinusIcon className="h-4 w-4" />
     </div>
   )
 }

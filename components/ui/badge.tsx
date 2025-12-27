@@ -2,30 +2,29 @@
 "use client"
 
 import * as React from "react"
-import { motion, HTMLMotionProps } from "motion/react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-lg border-2 px-3 py-1 text-xs font-semibold transition-colors shadow-sm",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+          "border-transparent bg-primary text-white shadow-primary/20",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border-transparent bg-default-200 text-default-900 dark:bg-default-800 dark:text-default-100",
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
+          "border-transparent bg-danger text-white shadow-danger/20",
+        outline: "border-default-300 bg-transparent text-default-900",
         success:
-          "border-transparent bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+          "border-transparent bg-green-500 text-white shadow-green-500/20",
         warning:
-          "border-transparent bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+          "border-transparent bg-yellow-500 text-white shadow-yellow-500/20",
         error:
-          "border-transparent bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+          "border-transparent bg-red-500 text-white shadow-red-500/20",
         info:
-          "border-transparent bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+          "border-transparent bg-blue-500 text-white shadow-blue-500/20",
       },
     },
     defaultVariants: {
@@ -34,20 +33,14 @@ const badgeVariants = cva(
   }
 )
 
-export interface BadgeProps
-  extends Omit<HTMLMotionProps<"div">, keyof VariantProps<typeof badgeVariants>>,
-    VariantProps<typeof badgeVariants> {}
+export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
   ({ className, variant, ...props }, ref) => {
     return (
-      <motion.div
+      <div
         ref={ref}
         className={cn(badgeVariants({ variant }), className)}
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
         {...props}
       />
     )

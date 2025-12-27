@@ -5,8 +5,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/app/utils/auth";
 
 export const metadata: Metadata = {
-  title: "InvenStock - Multi-Tenant Inventory System",
-  description: "ระบบจัดการสต็อกสินค้าแบบ Multi-Tenant",
+  title: "Showcase UI",
+  description: "A collection of beautiful components built with Radix UI and Tailwind CSS.",
 };
 
 export default function RootLayout({

@@ -1,3 +1,4 @@
+// components/ui/sonner.tsx
 "use client"
 
 import { useTheme } from "next-themes"
@@ -19,13 +20,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
-      style={
-        {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-        } as React.CSSProperties
-      }
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast group-[.toaster]:bg-default-50 group-[.toaster]:text-default-900 group-[.toaster]:border-2 group-[.toaster]:border-default-200 group-[.toaster]:shadow-lg group-[.toaster]:rounded-xl",
+          description: "group-[.toast]:text-default-600",
+          actionButton:
+            "group-[.toast]:bg-primary group-[.toast]:text-white group-[.toast]:rounded-lg",
+          cancelButton:
+            "group-[.toast]:bg-default-100 group-[.toast]:text-default-900 group-[.toast]:rounded-lg",
+        },
+      }}
       icons={{
         success: iconMap.success,
         error: iconMap.error,
